@@ -39,9 +39,9 @@ The Block Sensitive APIs feature of InheritiGuard proactively protects your priv
 
 This helps prevent:
 
-Tracking your location without permission
-Accessing your camera or microphone without your knowledge
-Reading or modifying your clipboard content
-Using your battery status to track device usage
-Manipulating notifications or background services (like push messages)
-You stay in control, and you’ll be alerted when suspicious activity is detected, giving you peace of mind while browsing.
+- Tracking your location without permission
+- Accessing your camera or microphone without your knowledge
+- Reading or modifying your clipboard content
+- Using your battery status to track device usage
+- Manipulating notifications or background services (like push messages)
+- You stay in control, and you’ll be alerted when suspicious activity is detected, giving you peace of mind while browsing.
