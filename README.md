@@ -1,6 +1,10 @@
 # InheritiGuard
 
-v1.0.4
+Latest Release : v1.0.4
+
+
+https://chromewebstore.google.com/detail/kebghapddpgnfjpkecphjecbffdhodln?utm_source=item-share-cb
+
 
 ## Features List
 
