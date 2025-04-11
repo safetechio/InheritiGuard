@@ -15,22 +15,22 @@ The URL Filtering Protection feature of InheritiGuard ensures that your browser 
 
 This protection helps you by:
 
-Restricting network connections to trusted and verified domains associated with Inheriti
-Preventing data leakage to unauthorized or unknown sites
-Blocking harmful redirects that could lead you to phishing or malware-infected pages
-Minimizing exposure to third-party trackers and unwanted connections
-By enabling URL Filtering Protection, you ensure that your browser only communicates with the right servers, keeping your sensitive data safe and under your control. InheritiGuard takes care of the filtering so you can focus on using the platform securely and confidently.
+- Restricting network connections to trusted and verified domains associated with Inheriti
+- Preventing data leakage to unauthorized or unknown sites
+- Blocking harmful redirects that could lead you to phishing or malware-infected pages
+- Minimizing exposure to third-party trackers and unwanted connections
+- By enabling URL Filtering Protection, you ensure that your browser only communicates with the right servers, keeping your sensitive data safe and under your control. InheritiGuard takes care of the filtering so you can focus on using the platform securely and confidently.
 
 ### Content Security Policy (CSP) Protection
 Websites often load content from multiple sources, including scripts, images, styles, and data from other sites. Unfortunately, this also means that malicious code can sneak in from untrusted sources, putting your sensitive information at risk.
 
 The CSP Protection feature of InheritiGuard helps safeguard your browsing by enforcing strict security rules that control which content a website can load. It acts as a barrier to:
 
-Blocking malicious scripts from untrusted sources
-Preventing data theft through unauthorized scripts
-Restricting connections to suspicious or dangerous domains
-Stopping cross-site scripting (XSS) attacks that try to hijack your data
-With CSP Protection enabled, you can browse with confidence, knowing that unauthorized content is automatically blocked and your data remains secure.
+- Blocking malicious scripts from untrusted sources
+- Preventing data theft through unauthorized scripts
+- Restricting connections to suspicious or dangerous domains
+- Stopping cross-site scripting (XSS) attacks that try to hijack your data
+- With CSP Protection enabled, you can browse with confidence, knowing that unauthorized content is automatically blocked and your data remains secure.
 
 ### Block Sensitive APIs
 Your browser provides websites with access to certain features, like your location, camera, clipboard, and more. While these features can be useful, they also introduce potential security risks if misused by malicious sites.
