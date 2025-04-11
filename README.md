@@ -1,4 +1,4 @@
-# InheritiGuard
+# Inheriti®Guard
 
 Latest Release : v1.0.4
 
