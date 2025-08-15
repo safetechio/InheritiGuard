@@ -2,7 +2,9 @@
 
 InheritiGuard is a security-focused browser extension that protects you while using the Inheriti platform by restricting access to untrusted domains, enforcing strict content security policies, and blocking sensitive browser features to prevent data leaks, phishing, and unauthorized tracking.
 
-Latest Release : v1.0.4
+[![Latest Release](https://img.shields.io/github/v/release/safetechio/InheritiGuard?display_name=tag&sort=semver&style=for-the-badge&logo=github)](https://github.com/safetechio/InheritiGuard/releases/latest)
+
+
 https://chromewebstore.google.com/detail/kebghapddpgnfjpkecphjecbffdhodln?utm_source=item-share-cb
 
 ## Features List
