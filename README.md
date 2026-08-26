@@ -4,7 +4,9 @@ InheritiGuard is a security-focused browser extension that protects you while us
 
 It also helps you leave Inheriti sessions safely: a targeted clipboard leak guard, idle lock with a custom timeout, one-click secure logoff from the Inheriti ecosystem, and a download/file trap for risky files.
 
-[![Latest Release](https://img.shields.io/github/v/release/safetechio/InheritiGuard?display_name=tag&sort=semver&style=for-the-badge&logo=github)](https://github.com/safetechio/InheritiGuard/releases/latest)
+**Version:** v1.0.5
+
+[![Release v1.0.5](https://img.shields.io/badge/release-v1.0.5-blue?style=for-the-badge&logo=github)](https://github.com/safetechio/InheritiGuard/releases)
 
 
 https://chromewebstore.google.com/detail/kebghapddpgnfjpkecphjecbffdhodln?utm_source=item-share-cb
