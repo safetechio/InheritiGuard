@@ -1,0 +1,91 @@
+{
+  "manifest_version": 3,
+  "name": "InheritiGuard",
+  "version": "1.0.5",
+  "homepage_url": "https://github.com/safetechio/InheritiGuard/releases",
+  "description": "Security extension for Inheriti app users that monitors and controls network traffic",
+  "permissions": [
+    "declarativeNetRequest",
+    "storage",
+    "notifications",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.inheriti.com/*",
+    "*://inheriti.com/*",
+    "*://*.safetech.io/*",
+    "*://safetech.io/*",
+    "*://*.cloudflareaccess.com/*",
+    "*://cloudflareaccess.com/*",
+    "*://kyc.cloudflareaccess.com/*",
+    "*://*.cloudflare.com/*",
+    "*://cloudflare.com/*",
+    "*://*.safekey.be/*",
+    "*://safekey.be/*",
+    "*://*.youtube.com/*",
+    "*://youtube.com/*",
+    "*://*.google.com/*",
+    "*://google.com/*",
+    "*://*.apple.com/*",
+    "*://apple.com/*",
+    "*://*.facebook.com/*",
+    "*://facebook.com/*",
+    "*://*.twitter.com/*",
+    "*://twitter.com/*",
+    "*://*.x.com/*",
+    "*://x.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "blocked.js",
+        "icons/*",
+        "images/*",
+        "public/font/*"
+      ],
+      "matches": [
+        "https://*.inheriti.com/*",
+        "https://inheriti.com/*",
+        "https://*.safetech.io/*",
+        "https://safetech.io/*",
+        "https://*.cloudflareaccess.com/*",
+        "https://cloudflareaccess.com/*",
+        "https://kyc.cloudflareaccess.com/*",
+        "https://*.cloudflare.com/*",
+        "https://cloudflare.com/*",
+        "https://*.safekey.be/*",
+        "https://safekey.be/*",
+        "https://widget.intercom.io/*"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; font-src 'self' data: chrome-extension://*;"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["scripts/api-protection.js"],
+    "run_at": "document_start",
+    "all_frames": true
+  }]
+} 

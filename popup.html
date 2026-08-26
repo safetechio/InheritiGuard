@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>InheritiGuard</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 0;
+    }
+    .logo {
+      height: 30px;
+      width: auto;
+    }
+    .status {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .status img {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+    }
+    .status.enabled img {
+      filter: none;
+      opacity: 1;
+    }
+    .status.disabled img {
+      filter: grayscale(1);
+      opacity: 0.45;
+    }
+    .status.enabled #statusText {
+      color: #1a73e8;
+      font-weight: 600;
+    }
+    .status.disabled #statusText {
+      color: #888;
+      font-weight: 400;
+    }
+    .protection-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    .protection-status {
+      font-size: 14px;
+      margin: 0;
+    }
+    .blocked-sites {
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .blocked-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .blocked-list li {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+      font-size: 14px;
+    }
+    .blocked-list li:last-child {
+      border-bottom: none;
+    }
+    .blocked-time {
+      color: #666;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .version-link {
+      position: fixed;
+      bottom: 12px;
+      right: 10px;
+      font-size: 11px;
+      color: #666;
+      text-decoration: none;
+    }
+    .version-link:hover {
+      text-decoration: underline;
+      color: #007bff;
+    }
+    .protection-toggles {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .toggle-label {
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="title">InheritiGuard</h1>
+    <img src="images/inheriti_logo_full_color.png" alt="Inheriti Logo" class="logo">
+  </div>
+  
+  <div class="protection-toggles">
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="enableToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="protection-status">Protection: <span id="enabledText">Enabled</span></span>
+    </div>
+    
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="apiBlockToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Block Sensitive APIs</span>
+    </div>
+  </div>
+
+  <div class="blocked-sites">
+    <h3></h3>
+    <ul id="blockedList" class="blocked-list">
+      <!-- Blocked sites will be inserted here -->
+    </ul>
+  </div>
+
+  <div class="status disabled" id="statusRow">
+    <img src="icons/icon32.png" alt="InheritiGuard" id="statusIcon">
+    <span id="statusText">Protection is disabled</span>
+  </div>
+  <a href="#" id="versionLink" class="version-link">v1.0.5</a>
+
+  <script src="popup.js"></script>
+</body>
+</html> 
