@@ -64,7 +64,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  sendAction({ action: 'getStatus' }).then(updateUI).catch((error) => {
+  const optionHint = document.getElementById('optionHint');
+  const defaultHint = 'Hover an option to see what it does.';
+
+  document.querySelectorAll('[data-tip]').forEach((element) => {
+    element.addEventListener('mouseenter', () => {
+      optionHint.textContent = element.getAttribute('data-tip');
+    });
+    element.addEventListener('mouseleave', () => {
+      optionHint.textContent = defaultHint;
+    });
+    element.addEventListener('focus', () => {
+      optionHint.textContent = element.getAttribute('data-tip');
+    });
+    element.addEventListener('blur', () => {
+      optionHint.textContent = defaultHint;
+    });
+  });
     console.error('[InheritiGuard Popup] Error getting status:', error);
   });
 
@@ -125,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   secureLeaveButton.addEventListener('click', async () => {
     const confirmed = window.confirm(
-      'Close all Inheriti tabs and clear Inheriti session cookies and site data?'
+      'Log off the Inheriti ecosystem?\n\nThis closes Inheriti, SafeTech, and SafeKey tabs and clears cookies and site data for those sessions.'
     );
     if (!confirmed) {
       return;
@@ -136,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const result = await sendAction({ action: 'secureLeave' });
       updateUI(result);
     } catch (error) {
-      console.error('[InheritiGuard Popup] Secure leave failed:', error);
+      console.error('[InheritiGuard Popup] Secure logoff failed:', error);
     } finally {
       secureLeaveButton.disabled = false;
     }

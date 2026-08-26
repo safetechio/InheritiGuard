@@ -146,11 +146,35 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      position: relative;
     }
     
     .toggle-label {
       font-size: 14px;
       color: #666;
+    }
+    .option-hint {
+      min-height: 52px;
+      margin: 4px 0 0;
+      padding: 8px 10px;
+      background: #f4f6f8;
+      border: 1px solid #e6e8eb;
+      border-radius: 6px;
+      color: #555;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .secure-leave {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      background-color: #c62828;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
     }
     .idle-minutes {
       width: 56px;
@@ -168,14 +192,14 @@
       padding: 10px 12px;
       border: none;
       border-radius: 8px;
-      background-color: #c62828;
+      background-color: #2196F3;
       color: white;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
     }
     .secure-leave:hover {
-      background-color: #b71c1c;
+      background-color: #1976D2;
     }
     .secure-leave:disabled {
       opacity: 0.6;
@@ -190,7 +214,7 @@
   </div>
   
   <div class="protection-toggles">
-    <div class="toggle-row">
+    <div class="toggle-row" data-tip="When on, InheritiGuard only allows navigation to trusted Inheriti domains and required login providers. Other sites are blocked.">
       <label class="switch">
         <input type="checkbox" id="enableToggle" checked>
         <span class="slider"></span>
@@ -198,7 +222,7 @@
       <span class="protection-status">Protection: <span id="enabledText">Enabled</span></span>
     </div>
     
-    <div class="toggle-row">
+    <div class="toggle-row" data-tip="Blocks camera, microphone, location, notifications, and service workers so pages cannot use those browser features while protection is on.">
       <label class="switch">
         <input type="checkbox" id="apiBlockToggle" checked>
         <span class="slider"></span>
@@ -206,7 +230,7 @@
       <span class="toggle-label">Block Sensitive APIs</span>
     </div>
 
-    <div class="toggle-row">
+    <div class="toggle-row" data-tip="Stops Inheriti URLs and data just copied from Inheriti from being pasted or read on untrusted sites. Clipboard still works on Inheriti itself.">
       <label class="switch">
         <input type="checkbox" id="clipboardGuardToggle" checked>
         <span class="slider"></span>
@@ -214,7 +238,7 @@
       <span class="toggle-label">Clipboard leak guard</span>
     </div>
 
-    <div class="toggle-row">
+    <div class="toggle-row" data-tip="After this many minutes idle or when the computer is locked, InheritiGuard logs you off the Inheriti ecosystem: it closes those tabs and clears session data.">
       <label class="switch">
         <input type="checkbox" id="idleLockToggle" checked>
         <span class="slider"></span>
@@ -224,7 +248,7 @@
       <span class="toggle-label">min</span>
     </div>
 
-    <div class="toggle-row">
+    <div class="toggle-row" data-tip="Blocks risky files from Inheriti sessions, such as HTML, SVG, scripts, and executables, and stops fake inline login pages (data/blob documents).">
       <label class="switch">
         <input type="checkbox" id="downloadTrapToggle" checked>
         <span class="slider"></span>
@@ -232,7 +256,9 @@
       <span class="toggle-label">Download / file trap</span>
     </div>
 
-    <button type="button" id="secureLeaveButton" class="secure-leave">Secure leave</button>
+    <p class="option-hint" id="optionHint">Hover an option to see what it does.</p>
+
+    <button type="button" id="secureLeaveButton" class="secure-leave" data-tip="Logs you off the Inheriti ecosystem: closes Inheriti, SafeTech, and SafeKey tabs and clears cookies and site data for those sessions.">Secure logoff</button>
   </div>
 
   <div class="blocked-sites">

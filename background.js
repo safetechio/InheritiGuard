@@ -391,8 +391,8 @@ async function showSecurityNotification(type, details) {
                 notificationOptions.buttons = [{ title: 'Open Inheriti' }];
                 break;
             case 'secureLeave':
-                notificationOptions.title = 'InheritiGuard - Secure leave';
-                notificationOptions.message = 'Inheriti tabs were closed and session data was cleared.';
+                notificationOptions.title = 'InheritiGuard - Secure logoff';
+                notificationOptions.message = 'You were logged off the Inheriti ecosystem. Tabs were closed and session data was cleared.';
                 notificationOptions.requireInteraction = false;
                 notificationOptions.buttons = [{ title: 'Open Inheriti' }];
                 break;
