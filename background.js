@@ -180,7 +180,7 @@ async function hasOpenSessionTabs() {
     return tabs.some((tab) => isSessionUrl(tab.url));
 }
 
-async function getClipboardDecisionAsync(senderUrl) {
+function clipboardDecisionForUrl(senderUrl, sessionOpen) {
     const onSessionPage = isSessionUrl(senderUrl);
     if (onSessionPage || !clipboardGuardEnabled) {
         return {
@@ -190,7 +190,6 @@ async function getClipboardDecisionAsync(senderUrl) {
         };
     }
 
-    const sessionOpen = await hasOpenSessionTabs();
     const sensitive = isSensitiveClipboardActive();
     return {
         clipboardGuardEnabled,
@@ -199,27 +198,32 @@ async function getClipboardDecisionAsync(senderUrl) {
     };
 }
 
+async function getClipboardDecisionAsync(senderUrl) {
+    const sessionOpen = await hasOpenSessionTabs();
+    return clipboardDecisionForUrl(senderUrl, sessionOpen);
+}
+
 async function broadcastClipboardState() {
     const tabs = await chrome.tabs.query({});
-    await Promise.all(tabs.map(async (tab) => {
+    const sessionOpen = tabs.some((tab) => isSessionUrl(tab.url));
+
+    for (const tab of tabs) {
         if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-            return;
+            continue;
         }
-        const decision = await getClipboardDecisionAsync(tab.url);
-        try {
-            await chrome.tabs.sendMessage(tab.id, {
-                action: 'clipboardState',
-                ...decision
-            });
-        } catch (error) {
-            // Tab may not have a content script.
-        }
-    }));
+        const decision = clipboardDecisionForUrl(tab.url, sessionOpen);
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'clipboardState',
+            ...decision
+        }).catch(() => {});
+    }
 }
 
 function markSensitiveClipboard() {
     sensitiveClipboardUntil = Date.now() + SENSITIVE_CLIPBOARD_MS;
-    broadcastClipboardState();
+    broadcastClipboardState().catch((error) => {
+        console.error('[InheritiGuard] Clipboard broadcast failed:', error);
+    });
 }
 
 function cookieUrl(cookie) {
@@ -258,7 +262,9 @@ async function secureLeave(reason) {
     sensitiveClipboardUntil = 0;
     apiBlockingEnabled = false;
     await chrome.storage.local.set({ apiBlockingEnabled: false });
-    await broadcastClipboardState();
+    broadcastClipboardState().catch((error) => {
+        console.error('[InheritiGuard] Clipboard broadcast failed:', error);
+    });
 
     await showSecurityNotification(reason === 'idle' ? 'idleLock' : 'secureLeave', {
         count: sessionTabs.length
@@ -641,11 +647,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     } else if (message.action === 'toggleClipboardGuard') {
         clipboardGuardEnabled = message.enabled;
-        chrome.storage.local.set({ clipboardGuardEnabled }, async () => {
-            await broadcastClipboardState();
-            sendResponse(getPublicStatus());
+        chrome.storage.local.set({ clipboardGuardEnabled });
+        sendResponse(getPublicStatus());
+        broadcastClipboardState().catch((error) => {
+            console.error('[InheritiGuard] Clipboard broadcast failed:', error);
         });
-        return true;
+        return false;
     } else if (message.action === 'toggleIdleLock') {
         idleLockEnabled = message.enabled;
         chrome.storage.local.set({ idleLockEnabled }, () => {
