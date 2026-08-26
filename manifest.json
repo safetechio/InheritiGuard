@@ -6,6 +6,7 @@
   "description": "Security extension for Inheriti app users that monitors and controls network traffic",
   "permissions": [
     "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
     "storage",
     "notifications",
     "tabs",
@@ -16,7 +17,7 @@
     "webNavigation"
   ],
   "host_permissions": [
-    "*://*.inheriti.com/*",
+    "*://*/*",
     "*://inheriti.com/*",
     "*://*.safetech.io/*",
     "*://safetech.io/*",
@@ -69,18 +70,7 @@
         "public/font/*"
       ],
       "matches": [
-        "https://*.inheriti.com/*",
-        "https://inheriti.com/*",
-        "https://*.safetech.io/*",
-        "https://safetech.io/*",
-        "https://*.cloudflareaccess.com/*",
-        "https://cloudflareaccess.com/*",
-        "https://kyc.cloudflareaccess.com/*",
-        "https://*.cloudflare.com/*",
-        "https://cloudflare.com/*",
-        "https://*.safekey.be/*",
-        "https://safekey.be/*",
-        "https://widget.intercom.io/*"
+        "<all_urls>"
       ]
     }
   ],

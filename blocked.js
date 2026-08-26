@@ -1,12 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[InheritiGuard Block Page] Loading...');
-    
     const blockedUrlElement = document.getElementById('blockedUrl');
-    blockedUrlElement.textContent = 'This website has been blocked for your security.';
+    const params = new URLSearchParams(window.location.search);
+    let blockedUrl = params.get('blockedUrl') || '';
 
-    // Add click handler for the back button
+    if (!blockedUrl && window.location.hash.length > 1) {
+        blockedUrl = window.location.hash.slice(1);
+    }
+
+    try {
+        blockedUrl = decodeURIComponent(blockedUrl);
+    } catch (error) {
+        // Keep the raw value if it is not encoded.
+    }
+
+    blockedUrlElement.textContent = blockedUrl || 'This website has been blocked for your security.';
+
     document.getElementById('backButton').addEventListener('click', (e) => {
-        console.log('[InheritiGuard Block Page] Returning to Inheriti');
-        window.location.href = 'https://app.inheriti.com';
+        e.preventDefault();
+        window.location.href = 'https://inheriti.com';
     });
-}); 
+});

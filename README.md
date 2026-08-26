@@ -59,7 +59,7 @@ Copied text is never sent to InheritiGuard itself—only a signal that a copy ha
 ### Idle Lock
 Inheriti dashboards are often left open on a desk or shared computer. Idle Lock watches for inactivity and then logs you off the Inheriti ecosystem automatically.
 
-You choose the timeout in the popup (1 to 120 minutes; the default is 10). When your computer is idle for that long, or the screen is locked, and Inheriti ecosystem tabs are open, Idle Lock:
+You choose the timeout in the popup (1 to 120 minutes; the default is 120). When your computer is idle for that long, or the screen is locked, and Inheriti ecosystem tabs are open, Idle Lock:
 
 - Closes Inheriti, SafeTech, and SafeKey tabs
 - Clears cookies and site data for those sessions

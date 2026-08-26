@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusIcon = document.getElementById('statusIcon');
   const statusText = document.getElementById('statusText');
 
+  let uiEpoch = 0;
+  let applyingStatus = false;
+
   function sendAction(payload) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(payload, (response) => {
@@ -23,12 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function updateUI(status) {
+  function updateUI(status, epoch) {
     if (!status) {
       console.error('[InheritiGuard Popup] Invalid status received');
       return;
     }
+    if (typeof epoch === 'number' && epoch !== uiEpoch) {
+      return;
+    }
 
+    applyingStatus = true;
     try {
       toggle.checked = !!status.isEnabled;
       enabledText.textContent = status.isEnabled ? 'Enabled' : 'Disabled';
@@ -61,81 +68,86 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'Protection is disabled';
     } catch (error) {
       console.error('[InheritiGuard Popup] Error updating UI:', error);
+    } finally {
+      applyingStatus = false;
     }
   }
 
-  const optionHint = document.getElementById('optionHint');
-  const defaultHint = 'Hover an option to see what it does.';
+  function bindToggle(element, action) {
+    element.addEventListener('change', () => {
+      if (applyingStatus) {
+        return;
+      }
+      const epoch = ++uiEpoch;
+      sendAction({ action, enabled: element.checked })
+        .then((status) => updateUI(status, epoch))
+        .catch((error) => {
+          console.error(`[InheritiGuard Popup] Error handling ${action}:`, error);
+          if (epoch === uiEpoch) {
+            element.checked = !element.checked;
+          }
+        });
+    });
+  }
+
+  const cursorTip = document.getElementById('cursorTip');
+
+  function placeCursorTip(event) {
+    const offset = 14;
+    const margin = 8;
+    cursorTip.style.left = '0px';
+    cursorTip.style.top = '0px';
+    const tipWidth = cursorTip.offsetWidth;
+    const tipHeight = cursorTip.offsetHeight;
+    const maxLeft = document.documentElement.clientWidth - tipWidth - margin;
+    const maxTop = document.documentElement.clientHeight - tipHeight - margin;
+    const left = Math.max(margin, Math.min(event.clientX + offset, maxLeft));
+    const top = Math.max(margin, Math.min(event.clientY + offset, maxTop));
+    cursorTip.style.left = `${left}px`;
+    cursorTip.style.top = `${top}px`;
+  }
 
   document.querySelectorAll('[data-tip]').forEach((element) => {
-    element.addEventListener('mouseenter', () => {
-      optionHint.textContent = element.getAttribute('data-tip');
+    element.addEventListener('mouseenter', (event) => {
+      cursorTip.textContent = element.getAttribute('data-tip');
+      cursorTip.hidden = false;
+      placeCursorTip(event);
+    });
+    element.addEventListener('mousemove', (event) => {
+      if (!cursorTip.hidden) {
+        placeCursorTip(event);
+      }
     });
     element.addEventListener('mouseleave', () => {
-      optionHint.textContent = defaultHint;
-    });
-    element.addEventListener('focus', () => {
-      optionHint.textContent = element.getAttribute('data-tip');
-    });
-    element.addEventListener('blur', () => {
-      optionHint.textContent = defaultHint;
+      cursorTip.hidden = true;
+      cursorTip.textContent = '';
     });
   });
-    console.error('[InheritiGuard Popup] Error getting status:', error);
-  });
 
-  toggle.addEventListener('change', () => {
-    sendAction({ action: 'toggleEnabled', enabled: toggle.checked })
-      .then(updateUI)
-      .catch((error) => {
-        console.error('[InheritiGuard Popup] Error toggling enabled state:', error);
-        toggle.checked = !toggle.checked;
-      });
-  });
+  const loadEpoch = uiEpoch;
+  sendAction({ action: 'getStatus' })
+    .then((status) => updateUI(status, loadEpoch))
+    .catch((error) => {
+      console.error('[InheritiGuard Popup] Error getting status:', error);
+    });
 
-  apiToggle.addEventListener('change', () => {
-    sendAction({ action: 'toggleApiBlocking', enabled: apiToggle.checked })
-      .then(updateUI)
-      .catch((error) => {
-        console.error('[InheritiGuard Popup] Error toggling API blocking:', error);
-        apiToggle.checked = !apiToggle.checked;
-      });
-  });
-
-  clipboardToggle.addEventListener('change', () => {
-    sendAction({ action: 'toggleClipboardGuard', enabled: clipboardToggle.checked })
-      .then(updateUI)
-      .catch((error) => {
-        console.error('[InheritiGuard Popup] Error toggling clipboard guard:', error);
-        clipboardToggle.checked = !clipboardToggle.checked;
-      });
-  });
-
-  idleToggle.addEventListener('change', () => {
-    sendAction({ action: 'toggleIdleLock', enabled: idleToggle.checked })
-      .then(updateUI)
-      .catch((error) => {
-        console.error('[InheritiGuard Popup] Error toggling idle lock:', error);
-        idleToggle.checked = !idleToggle.checked;
-      });
-  });
+  bindToggle(toggle, 'toggleEnabled');
+  bindToggle(apiToggle, 'toggleApiBlocking');
+  bindToggle(clipboardToggle, 'toggleClipboardGuard');
+  bindToggle(idleToggle, 'toggleIdleLock');
+  bindToggle(downloadToggle, 'toggleDownloadTrap');
 
   idleMinutesInput.addEventListener('change', () => {
-    const minutes = Math.max(1, Math.min(120, Number(idleMinutesInput.value) || 10));
+    if (applyingStatus) {
+      return;
+    }
+    const minutes = Math.max(1, Math.min(120, Number(idleMinutesInput.value) || 120));
     idleMinutesInput.value = minutes;
+    const epoch = ++uiEpoch;
     sendAction({ action: 'setIdleLockMinutes', minutes })
-      .then(updateUI)
+      .then((status) => updateUI(status, epoch))
       .catch((error) => {
         console.error('[InheritiGuard Popup] Error saving idle minutes:', error);
-      });
-  });
-
-  downloadToggle.addEventListener('change', () => {
-    sendAction({ action: 'toggleDownloadTrap', enabled: downloadToggle.checked })
-      .then(updateUI)
-      .catch((error) => {
-        console.error('[InheritiGuard Popup] Error toggling download trap:', error);
-        downloadToggle.checked = !downloadToggle.checked;
       });
   });
 
@@ -148,9 +160,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     secureLeaveButton.disabled = true;
+    const epoch = ++uiEpoch;
     try {
       const result = await sendAction({ action: 'secureLeave' });
-      updateUI(result);
+      updateUI(result, epoch);
     } catch (error) {
       console.error('[InheritiGuard Popup] Secure logoff failed:', error);
     } finally {

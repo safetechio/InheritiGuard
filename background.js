@@ -11,7 +11,7 @@ let handleTabUpdate = null;
 let apiBlockingEnabled = true;
 let clipboardGuardEnabled = true;
 let idleLockEnabled = true;
-let idleLockMinutes = 10;
+let idleLockMinutes = 120;
 let downloadTrapEnabled = true;
 let sensitiveClipboardUntil = 0;
 const blockedDownloadIds = new Set();
@@ -64,16 +64,12 @@ function addBlockedSite(url) {
 // Function to check if a URL is from a trusted domain
 function isTrustedDomain(url) {
     try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-        
-        console.log('[InheritiGuard] Checking domain:', hostname);
-
-        // Skip checking extension URLs
-        if (url.startsWith('chrome-extension://')) {
-            console.log('[InheritiGuard] Allowing extension URL:', url);
+        if (isBrowserInternalUrl(url) || url.startsWith('chrome-extension://')) {
             return true;
         }
+
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
 
         // List of explicitly trusted hostnames and domains
         const trustedHostnames = [
@@ -152,6 +148,41 @@ function hostnameFromUrl(url) {
 function isSessionHostname(hostname) {
     const host = (hostname || '').toLowerCase();
     return SESSION_ROOT_DOMAINS.some((root) => host === root || host.endsWith('.' + root));
+}
+
+function isBrowserInternalUrl(url) {
+    if (!url || typeof url !== 'string') {
+        return true;
+    }
+
+    const value = url.trim().toLowerCase();
+    return (
+        value.startsWith('chrome://')
+        || value.startsWith('chrome-extension://')
+        || value.startsWith('chrome-error://')
+        || value.startsWith('chrome-search://')
+        || value.startsWith('chrome-untrusted://')
+        || value.startsWith('devtools://')
+        || value.startsWith('edge://')
+        || value.startsWith('about:')
+        || value.startsWith('view-source:')
+    );
+}
+
+function getBrandedBlockUrl(blockedUrl) {
+    return `${chrome.runtime.getURL('blocked.html')}?blockedUrl=${encodeURIComponent(blockedUrl)}`;
+}
+
+async function showBrandedBlockPage(tabId, blockedUrl) {
+    if (isBrowserInternalUrl(blockedUrl)) {
+        return;
+    }
+    addBlockedSite(blockedUrl);
+    try {
+        await chrome.tabs.update(tabId, { url: getBrandedBlockUrl(blockedUrl) });
+    } catch (error) {
+        console.error('[InheritiGuard] Error opening block page:', error);
+    }
 }
 
 function isSessionUrl(url) {
@@ -274,7 +305,7 @@ async function secureLeave(reason) {
 }
 
 function applyIdleDetection() {
-    const seconds = Math.max(15, Math.min(60 * 120, Number(idleLockMinutes) * 60 || 600));
+    const seconds = Math.max(15, Math.min(60 * 120, Number(idleLockMinutes) * 60 || 7200));
     try {
         chrome.idle.setDetectionInterval(seconds);
         console.log('[InheritiGuard] Idle detection set to', seconds, 'seconds');
@@ -406,7 +437,7 @@ async function showSecurityNotification(type, details) {
         chrome.notifications.onButtonClicked.addListener((clickedId, buttonIndex) => {
             if (clickedId === notificationId) {
                 if (buttonIndex === 0) {
-                    chrome.tabs.create({ url: 'https://app.inheriti.com' });
+                    chrome.tabs.create({ url: 'https://inheriti.com' });
                 } else if (buttonIndex === 1) {
                     chrome.tabs.create({ url: chrome.runtime.getURL('blocked.html') });
                 }
@@ -425,7 +456,7 @@ self.addEventListener('notificationclick', function(event) {
     event.notification.close();
     
     if (event.notification.tag === 'inheriti-guard-blocked') {
-        clients.openWindow('https://app.inheriti.com');
+        clients.openWindow('https://inheriti.com');
     }
 });
 
@@ -446,77 +477,55 @@ async function updateRules(enabled) {
             
             // Define the listener function with session handling
             handleTabUpdate = async (tabId, changeInfo, tab) => {
-                if (changeInfo.url && !changeInfo.url.startsWith('chrome-extension://')) {
-                    console.log('[InheritiGuard] Checking URL:', changeInfo.url);
-                    
-                    // Allow Cloudflare Access authentication URLs
-                    if (changeInfo.url.includes('kyc.cloudflareaccess.com/cdn-cgi/access/login')) {
-                        console.log('[InheritiGuard] Allowing Cloudflare Access auth URL:', changeInfo.url);
-                        return;
-                    }
+                const candidate = changeInfo.url || tab?.pendingUrl;
+                if (!candidate) {
+                    return;
+                }
+                if (isBrowserInternalUrl(candidate) || isBrowserInternalUrl(tab?.url)) {
+                    return;
+                }
 
-                    if (!isTrustedDomain(changeInfo.url)) {
-                        const blockedUrl = changeInfo.url;
-                        console.log(`[InheritiGuard] Tab listener blocked URL: ${blockedUrl}`);
-                        addBlockedSite(blockedUrl);
+                if (candidate.includes('kyc.cloudflareaccess.com/cdn-cgi/access/login')) {
+                    return;
+                }
 
-                        // Redirect to blocked page
-                        const blockPageURL = chrome.runtime.getURL('blocked.html');
-                        const redirectUrl = `${blockPageURL}?blockedUrl=${encodeURIComponent(blockedUrl)}`;
-                        
-                        try {
-                            await chrome.tabs.update(tabId, { url: redirectUrl });
-                        } catch (error) {
-                            console.error('[InheritiGuard] Error updating tab:', error);
-                        }
-                    } else {
-                        console.log('[InheritiGuard] Allowing trusted URL:', changeInfo.url);
-                    }
+                if (!isTrustedDomain(candidate)) {
+                    console.log(`[InheritiGuard] Tab listener blocked URL: ${candidate}`);
+                    await showBrandedBlockPage(tabId, candidate);
                 }
             };
 
             chrome.tabs.onUpdated.addListener(handleTabUpdate);
 
-            // Add declarativeNetRequest rules
+            const blockPage = chrome.runtime.getURL('blocked.html');
             await chrome.declarativeNetRequest.updateDynamicRules({
-                removeRuleIds: [1, 2], // Remove existing rules
+                removeRuleIds: [1, 2],
                 addRules: [
                     {
                         id: 1,
                         priority: 1,
                         action: {
-                            type: "block"
+                            type: "redirect",
+                            redirect: {
+                                regexSubstitution: `${blockPage}#\\0`
+                            }
                         },
                         condition: {
-                            urlFilter: "*",
+                            regexFilter: "^https?://.+",
                             resourceTypes: ["main_frame"],
                             excludedInitiatorDomains: [chrome.runtime.id],
                             excludedRequestDomains: [
-                                // ... your trusted domains ...
                                 "inheriti.com",
-                                "*.inheriti.com",
-                                "business.inheriti.com",
-                                "business-prod.inheriti.com",
-                                "business-stg.inheriti.com",
-                                "business-dev.inheriti.com",
-                                "inheritichain-explorer.inheriti.com",
-                                "inheritichain-explorer-dev.inheriti.com",
                                 "safetech.io",
-                                "*.safetech.io",
                                 "cloudflareaccess.com",
-                                "*.cloudflareaccess.com",
                                 "cloudflare.com",
-                                "*.cloudflare.com",
                                 "safekey.be",
                                 "youtube.com",
-                                "www.youtube.com",
                                 "accounts.google.com",
                                 "appleid.apple.com",
                                 "facebook.com",
-                                "www.facebook.com",
                                 "twitter.com",
-                                "x.com",
-                                "api.twitter.com"
+                                "x.com"
                             ]
                         }
                     }
@@ -537,20 +546,10 @@ async function updateRules(enabled) {
 
 // Handle navigation events
 function handleNavigation(details) {
-    if (!isTrustedDomain(details.url)) {
-        console.log(`[InheritiGuard] Navigation blocked to: ${details.url}`);
-        addBlockedSite(details.url);
-        
-        // Update the blocked page URL
-        const blockPageURL = chrome.runtime.getURL('blocked.html');
-        const redirectUrl = `${blockPageURL}?blockedUrl=${encodeURIComponent(details.url)}`;
-        
-        chrome.tabs.update(details.tabId, {
-            url: redirectUrl
-        }).catch(error => {
-            console.error('[InheritiGuard] Error updating tab:', error);
-        });
+    if (isBrowserInternalUrl(details.url) || isTrustedDomain(details.url)) {
+        return;
     }
+    showBrandedBlockPage(details.tabId, details.url);
 }
 
 // Function to update extension status and icon
@@ -610,7 +609,7 @@ async function initializeExtension() {
         apiBlockingEnabled = result.apiBlockingEnabled ?? true;
         clipboardGuardEnabled = result.clipboardGuardEnabled ?? true;
         idleLockEnabled = result.idleLockEnabled ?? true;
-        idleLockMinutes = Number(result.idleLockMinutes) > 0 ? Number(result.idleLockMinutes) : 10;
+        idleLockMinutes = Number(result.idleLockMinutes) > 0 ? Number(result.idleLockMinutes) : 120;
         downloadTrapEnabled = result.downloadTrapEnabled ?? true;
         blockedSites = result.blockedSites || [];
 
@@ -618,6 +617,7 @@ async function initializeExtension() {
         applyIdleDetection();
         updateStatus(isEnabled ? 'secure' : 'warning');
         await updateRules(isEnabled);
+        notifyTabsOfProtection();
     } catch (error) {
         console.error('[InheritiGuard] Initialization error:', error);
         updateStatus('warning');
@@ -638,7 +638,7 @@ async function handleRuntimeMessage(message, sender) {
 
     if (message.action === 'toggleEnabled') {
         isEnabled = message.enabled === true;
-        await chrome.storage.local.set({ isEnabled });
+        await chrome.storage.local.set({ isEnabled: isEnabled });
         await updateRules(isEnabled);
         notifyTabsOfProtection();
         return getPublicStatus();
@@ -668,7 +668,7 @@ async function handleRuntimeMessage(message, sender) {
     }
 
     if (message.action === 'setIdleLockMinutes') {
-        idleLockMinutes = Math.max(1, Math.min(120, Number(message.minutes) || 10));
+        idleLockMinutes = Math.max(1, Math.min(120, Number(message.minutes) || 120));
         await chrome.storage.local.set({ idleLockMinutes });
         applyIdleDetection();
         return getPublicStatus();
@@ -767,7 +767,19 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
-    if (!downloadTrapEnabled || details.frameId !== 0) {
+    if (details.frameId !== 0) {
+        return;
+    }
+
+    if (isEnabled
+        && !isBrowserInternalUrl(details.url)
+        && !details.url.includes('kyc.cloudflareaccess.com/cdn-cgi/access/login')
+        && !isTrustedDomain(details.url)) {
+        await showBrandedBlockPage(details.tabId, details.url);
+        return;
+    }
+
+    if (!downloadTrapEnabled) {
         return;
     }
 

@@ -7,6 +7,7 @@
       width: 400px;
       padding: 15px 15px 48px;
       font-family: Arial, sans-serif;
+      overflow: hidden;
     }
     .header {
       display: flex;
@@ -60,8 +61,9 @@
     .switch {
       position: relative;
       display: inline-block;
-      width: 60px;
-      height: 34px;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
     }
     .switch input {
       opacity: 0;
@@ -77,15 +79,15 @@
       bottom: 0;
       background-color: #ccc;
       transition: .4s;
-      border-radius: 34px;
+      border-radius: 20px;
     }
     .slider:before {
       position: absolute;
       content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
       background-color: white;
       transition: .4s;
       border-radius: 50%;
@@ -94,7 +96,7 @@
       background-color: #2196F3;
     }
     input:checked + .slider:before {
-      transform: translateX(26px);
+      transform: translateX(16px);
     }
     .protection-status {
       font-size: 14px;
@@ -125,7 +127,7 @@
     }
     .version-link {
       position: fixed;
-      bottom: 12px;
+      bottom: 42px;
       right: 10px;
       font-size: 11px;
       color: #666;
@@ -153,28 +155,17 @@
       font-size: 14px;
       color: #666;
     }
-    .option-hint {
-      min-height: 52px;
-      margin: 4px 0 0;
+    .cursor-tip {
+      position: fixed;
+      z-index: 1000;
+      max-width: 240px;
       padding: 8px 10px;
-      background: #f4f6f8;
-      border: 1px solid #e6e8eb;
-      border-radius: 6px;
-      color: #555;
+      background: #1f1f1f;
+      color: #fff;
       font-size: 12px;
-      line-height: 1.45;
-    }
-    .secure-leave {
-      width: 100%;
-      margin-top: 8px;
-      padding: 10px 12px;
-      border: none;
-      border-radius: 8px;
-      background-color: #c62828;
-      color: white;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
+      line-height: 1.4;
+      border-radius: 6px;
+      pointer-events: none;
     }
     .idle-minutes {
       width: 56px;
@@ -187,14 +178,17 @@
       opacity: 0.5;
     }
     .secure-leave {
-      width: 100%;
-      margin-top: 8px;
-      padding: 10px 12px;
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      width: auto;
+      margin: 0;
+      padding: 7px 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       background-color: #2196F3;
       color: white;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
     }
@@ -244,7 +238,7 @@
         <span class="slider"></span>
       </label>
       <span class="toggle-label">Idle lock</span>
-      <input type="number" id="idleLockMinutes" class="idle-minutes" min="1" max="120" value="10">
+      <input type="number" id="idleLockMinutes" class="idle-minutes" min="1" max="120" value="120">
       <span class="toggle-label">min</span>
     </div>
 
@@ -255,11 +249,9 @@
       </label>
       <span class="toggle-label">Download / file trap</span>
     </div>
-
-    <p class="option-hint" id="optionHint">Hover an option to see what it does.</p>
-
-    <button type="button" id="secureLeaveButton" class="secure-leave" data-tip="Logs you off the Inheriti ecosystem: closes Inheriti, SafeTech, and SafeKey tabs and clears cookies and site data for those sessions.">Secure logoff</button>
   </div>
+
+  <div id="cursorTip" class="cursor-tip" hidden></div>
 
   <div class="blocked-sites">
     <h3></h3>
@@ -273,6 +265,7 @@
     <span id="statusText">Protection is disabled</span>
   </div>
   <a href="#" id="versionLink" class="version-link">v1.0.5</a>
+  <button type="button" id="secureLeaveButton" class="secure-leave" data-tip="Logs you off the Inheriti ecosystem: closes Inheriti, SafeTech, and SafeKey tabs and clears cookies and site data for those sessions.">Secure logoff</button>
 
   <script src="popup.js"></script>
 </body>
