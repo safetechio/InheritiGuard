@@ -436,6 +436,11 @@ async function updateRules(enabled) {
     try {
         await removeAllRules();
 
+        if (handleTabUpdate) {
+            chrome.tabs.onUpdated.removeListener(handleTabUpdate);
+            handleTabUpdate = null;
+        }
+
         if (enabled) {
             console.log('[InheritiGuard] Adding protection rules...');
             
@@ -470,7 +475,6 @@ async function updateRules(enabled) {
                 }
             };
 
-            // Add the listener for URL checking
             chrome.tabs.onUpdated.addListener(handleTabUpdate);
 
             // Add declarativeNetRequest rules
@@ -522,11 +526,6 @@ async function updateRules(enabled) {
             console.log('[InheritiGuard] Protection rules added successfully');
             updateStatus('secure');
         } else {
-            if (handleTabUpdate) {
-                chrome.tabs.onUpdated.removeListener(handleTabUpdate);
-                handleTabUpdate = null;
-            }
-            
             console.log('[InheritiGuard] Protection disabled - rules removed');
             updateStatus('warning');
         }
@@ -574,15 +573,30 @@ function updateStatus(status) {
     });
 }
 
-// Initialize extension
-console.log('[InheritiGuard] Extension initializing...');
+function notifyTabsOfProtection() {
+    chrome.tabs.query({}).then((tabs) => {
+        for (const tab of tabs) {
+            if (!tab.id) {
+                continue;
+            }
+            chrome.tabs.sendMessage(tab.id, {
+                action: 'protectionState',
+                isEnabled,
+                apiBlockingEnabled
+            }).catch(() => {});
+        }
+    }).catch((error) => {
+        console.error('[InheritiGuard] Failed to notify tabs:', error);
+    });
+}
 
-// Initial cleanup and state loading
-(async () => {
+let resolveReady;
+const extensionReady = new Promise((resolve) => {
+    resolveReady = resolve;
+});
+
+async function initializeExtension() {
     try {
-        await removeAllRules();
-        
-        // Load saved state and blocked sites
         const result = await chrome.storage.local.get([
             'isEnabled',
             'blockedSites',
@@ -592,115 +606,131 @@ console.log('[InheritiGuard] Extension initializing...');
             'idleLockMinutes',
             'downloadTrapEnabled'
         ]);
-        isEnabled = result.isEnabled || false;
+        isEnabled = result.isEnabled === true;
         apiBlockingEnabled = result.apiBlockingEnabled ?? true;
         clipboardGuardEnabled = result.clipboardGuardEnabled ?? true;
         idleLockEnabled = result.idleLockEnabled ?? true;
         idleLockMinutes = Number(result.idleLockMinutes) > 0 ? Number(result.idleLockMinutes) : 10;
         downloadTrapEnabled = result.downloadTrapEnabled ?? true;
         blockedSites = result.blockedSites || [];
-        
+
         console.log(`[InheritiGuard] Loaded saved state: ${isEnabled ? 'enabled' : 'disabled'}`);
-        console.log(`[InheritiGuard] API Blocking: ${apiBlockingEnabled ? 'enabled' : 'disabled'}`);
-        
         applyIdleDetection();
         updateStatus(isEnabled ? 'secure' : 'warning');
-        if (isEnabled) {
-            await updateRules(true);
-        }
+        await updateRules(isEnabled);
     } catch (error) {
         console.error('[InheritiGuard] Initialization error:', error);
         updateStatus('warning');
+    } finally {
+        resolveReady();
     }
-})();
+}
 
-// Listen for extension unload/disable
-chrome.runtime.onSuspend.addListener(() => {
-    console.log('[InheritiGuard] Extension being suspended - cleaning up rules');
-    removeAllRules();
-});
+console.log('[InheritiGuard] Extension initializing...');
+initializeExtension();
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+async function handleRuntimeMessage(message, sender) {
     console.log('[InheritiGuard] Received message:', message);
-    
+
     if (message.action === 'getStatus') {
-        sendResponse(getPublicStatus());
-        return false;
-    } else if (message.action === 'toggleEnabled') {
-        isEnabled = message.enabled;
-        console.log(`[InheritiGuard] Protection toggled: ${isEnabled ? 'ON' : 'OFF'}`);
-        
-        chrome.storage.local.set({ isEnabled }, () => {
-            console.log(`[InheritiGuard] State saved: ${isEnabled}`);
-        });
-        
-        updateRules(isEnabled).then(() => {
-            sendResponse(getPublicStatus());
-        });
-        return true;
-    } else if (message.action === 'toggleApiBlocking') {
-        apiBlockingEnabled = message.enabled;
-        chrome.storage.local.set({ apiBlockingEnabled }, () => {
-            sendResponse(getPublicStatus());
-        });
-        return true;
-    } else if (message.action === 'toggleClipboardGuard') {
-        clipboardGuardEnabled = message.enabled;
-        chrome.storage.local.set({ clipboardGuardEnabled });
-        sendResponse(getPublicStatus());
+        return getPublicStatus();
+    }
+
+    if (message.action === 'toggleEnabled') {
+        isEnabled = message.enabled === true;
+        await chrome.storage.local.set({ isEnabled });
+        await updateRules(isEnabled);
+        notifyTabsOfProtection();
+        return getPublicStatus();
+    }
+
+    if (message.action === 'toggleApiBlocking') {
+        apiBlockingEnabled = message.enabled === true;
+        await chrome.storage.local.set({ apiBlockingEnabled });
+        notifyTabsOfProtection();
+        return getPublicStatus();
+    }
+
+    if (message.action === 'toggleClipboardGuard') {
+        clipboardGuardEnabled = message.enabled === true;
+        await chrome.storage.local.set({ clipboardGuardEnabled });
         broadcastClipboardState().catch((error) => {
             console.error('[InheritiGuard] Clipboard broadcast failed:', error);
         });
-        return false;
-    } else if (message.action === 'toggleIdleLock') {
-        idleLockEnabled = message.enabled;
-        chrome.storage.local.set({ idleLockEnabled }, () => {
-            applyIdleDetection();
-            sendResponse(getPublicStatus());
-        });
-        return true;
-    } else if (message.action === 'setIdleLockMinutes') {
+        return getPublicStatus();
+    }
+
+    if (message.action === 'toggleIdleLock') {
+        idleLockEnabled = message.enabled === true;
+        await chrome.storage.local.set({ idleLockEnabled });
+        applyIdleDetection();
+        return getPublicStatus();
+    }
+
+    if (message.action === 'setIdleLockMinutes') {
         idleLockMinutes = Math.max(1, Math.min(120, Number(message.minutes) || 10));
-        chrome.storage.local.set({ idleLockMinutes }, () => {
-            applyIdleDetection();
-            sendResponse(getPublicStatus());
-        });
-        return true;
-    } else if (message.action === 'toggleDownloadTrap') {
-        downloadTrapEnabled = message.enabled;
-        chrome.storage.local.set({ downloadTrapEnabled }, () => {
-            sendResponse(getPublicStatus());
-        });
-        return true;
-    } else if (message.action === 'secureLeave') {
-        secureLeave('manual').then((result) => sendResponse(result));
-        return true;
-    } else if (message.action === 'clipboardCopiedOnSession') {
+        await chrome.storage.local.set({ idleLockMinutes });
+        applyIdleDetection();
+        return getPublicStatus();
+    }
+
+    if (message.action === 'toggleDownloadTrap') {
+        downloadTrapEnabled = message.enabled === true;
+        await chrome.storage.local.set({ downloadTrapEnabled });
+        return getPublicStatus();
+    }
+
+    if (message.action === 'secureLeave') {
+        return secureLeave('manual');
+    }
+
+    if (message.action === 'clipboardCopiedOnSession') {
         markSensitiveClipboard();
-        sendResponse({ ok: true });
-        return false;
-    } else if (message.action === 'clipboardQuery') {
-        getClipboardDecisionAsync(sender?.url || sender?.tab?.url || '').then((decision) => {
-            sendResponse(decision);
-        });
-        return true;
-    } else if (message.action === 'clipboardBlocked') {
+        return { ok: true };
+    }
+
+    if (message.action === 'clipboardQuery') {
+        return getClipboardDecisionAsync(sender?.url || sender?.tab?.url || '');
+    }
+
+    if (message.action === 'clipboardBlocked') {
         showSecurityNotification('clipboard', {
             type: message.type,
             url: message.url
         });
-    } else if (message.action === 'apiBlocked') {
+        return { ok: true };
+    }
+
+    if (message.action === 'apiBlocked') {
         showSecurityNotification('api', {
             type: message.type,
             url: message.url
         });
-    } else if (message.action === 'cspViolation') {
+        return { ok: true };
+    }
+
+    if (message.action === 'cspViolation') {
         showSecurityNotification('csp', {
             url: message.url,
             violation: message.violation
         });
+        return { ok: true };
     }
+
+    return undefined;
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    extensionReady
+        .then(() => handleRuntimeMessage(message, sender))
+        .then((response) => {
+            sendResponse(response);
+        })
+        .catch((error) => {
+            console.error('[InheritiGuard] Message handling error:', error);
+            sendResponse(getPublicStatus());
+        });
+    return true;
 });
 
 // Log when extension is installed or updated

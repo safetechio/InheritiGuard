@@ -1,186 +1,186 @@
 (function() {
     console.log('[InheritiGuard] API Protection initializing...');
-    
-    let isEnabled = true; // Default state
-    let apiBlockingEnabled = true; // Default state for API blocking
-    
-    // Store original APIs for reference
+
+    let isEnabled = false;
+    let apiBlockingEnabled = true;
+    let blockingApplied = false;
+
     const originalMediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+        ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+        : null;
+    const originalEnumerateDevices = navigator.mediaDevices && navigator.mediaDevices.enumerateDevices
+        ? navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices)
+        : null;
     const originalGeolocation = navigator.geolocation;
     const originalBattery = navigator.getBattery;
     const originalNotification = window.Notification;
     const originalServiceWorker = navigator.serviceWorker;
+    const originalServiceWorkerRegister = navigator.serviceWorker && navigator.serviceWorker.register
+        ? navigator.serviceWorker.register.bind(navigator.serviceWorker)
+        : null;
 
-    // Helper function to notify extension with error handling
     function notifyBlocked(type) {
-        if (!apiBlockingEnabled) return; // Don't notify if API blocking is disabled
-        
+        if (!isEnabled || !apiBlockingEnabled) {
+            return;
+        }
+
         try {
             chrome.runtime.sendMessage({
                 action: 'apiBlocked',
                 type: type,
                 url: window.location.href
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    // Ignore message port closure
-                    console.debug('[InheritiGuard] Message port closed:', chrome.runtime.lastError.message);
-                }
+            }, () => {
+                void chrome.runtime.lastError;
             });
         } catch (error) {
             console.debug('[InheritiGuard] Notification error:', error);
         }
     }
 
-    // Block Media Devices API
-    if (navigator.mediaDevices) {
-        navigator.mediaDevices.getUserMedia = new Proxy(navigator.mediaDevices.getUserMedia, {
-            apply: (target, thisArg, args) => {
-                notifyBlocked('Camera/Microphone');
-                return Promise.reject(new Error('Media access blocked by InheritiGuard'));
-            }
-        });
-
-        navigator.mediaDevices.enumerateDevices = new Proxy(navigator.mediaDevices.enumerateDevices, {
-            apply: (target, thisArg, args) => {
-                notifyBlocked('Device enumeration');
-                return Promise.reject(new Error('Device enumeration blocked by InheritiGuard'));
-            }
-        });
-    }
-
-    // Block Geolocation API
-    navigator.geolocation = {
-        getCurrentPosition: (success, error) => {
-            notifyBlocked('Geolocation');
-            if (error) {
-                error({ code: 1, message: 'Geolocation blocked by InheritiGuard' });
-            }
-        },
-        watchPosition: () => {
-            notifyBlocked('Geolocation tracking');
-            return 0;
-        },
-        clearWatch: () => {}
-    };
-
-    // Block Battery API
-    if (navigator.getBattery) {
-        navigator.getBattery = () => {
-            notifyBlocked('Battery status');
-            return Promise.reject(new Error('Battery status blocked by InheritiGuard'));
-        };
-    }
-
-    // Block Notifications API
-    window.Notification = {
-        requestPermission: () => {
-            notifyBlocked('Notification permission');
-            return Promise.reject(new Error('Notifications blocked by InheritiGuard'));
-        },
-        permission: 'denied'
-    };
-
-    // Block Service Worker registration
-    if (navigator.serviceWorker) {
-        navigator.serviceWorker.register = () => {
-            notifyBlocked('Service Worker registration');
-            return Promise.reject(new Error('Service Worker registration blocked by InheritiGuard'));
-        };
-    }
-
-    // Prevent access via Object.getOwnPropertyDescriptor
-    const protectProperty = (obj, prop) => {
-        try {
-            Object.defineProperty(obj, prop, {
-                get: () => {
-                    notifyBlocked(`${prop} access`);
-                    return undefined;
-                },
-                configurable: false
-            });
-        } catch (e) {
-            console.log(`[InheritiGuard] Could not protect ${prop}:`, e);
-        }
-    };
-
-    // Additional protection for direct property access
-    protectProperty(navigator, 'mediaDevices');
-    protectProperty(navigator, 'getUserMedia');
-    protectProperty(navigator, 'webkitGetUserMedia');
-    protectProperty(navigator, 'mozGetUserMedia');
-    protectProperty(window, 'Notification');
-    protectProperty(navigator, 'serviceWorker');
-
-    // Function to restore original APIs
     function restoreApis() {
-        if (originalMediaDevices) navigator.mediaDevices = originalMediaDevices;
-        if (originalGeolocation) navigator.geolocation = originalGeolocation;
-        if (originalBattery) navigator.getBattery = originalBattery;
-        if (originalNotification) window.Notification = originalNotification;
-        if (originalServiceWorker) navigator.serviceWorker = originalServiceWorker;
+        if (originalMediaDevices) {
+            if (originalGetUserMedia) {
+                originalMediaDevices.getUserMedia = originalGetUserMedia;
+            }
+            if (originalEnumerateDevices) {
+                originalMediaDevices.enumerateDevices = originalEnumerateDevices;
+            }
+            try {
+                navigator.mediaDevices = originalMediaDevices;
+            } catch (error) {
+                console.debug('[InheritiGuard] Could not restore mediaDevices:', error);
+            }
+        }
+        if (originalGeolocation) {
+            try {
+                navigator.geolocation = originalGeolocation;
+            } catch (error) {
+                console.debug('[InheritiGuard] Could not restore geolocation:', error);
+            }
+        }
+        if (originalBattery) {
+            navigator.getBattery = originalBattery;
+        }
+        if (originalNotification) {
+            try {
+                window.Notification = originalNotification;
+            } catch (error) {
+                console.debug('[InheritiGuard] Could not restore Notification:', error);
+            }
+        }
+        if (originalServiceWorker) {
+            if (originalServiceWorkerRegister) {
+                originalServiceWorker.register = originalServiceWorkerRegister;
+            }
+            try {
+                navigator.serviceWorker = originalServiceWorker;
+            } catch (error) {
+                console.debug('[InheritiGuard] Could not restore serviceWorker:', error);
+            }
+        }
+        blockingApplied = false;
     }
 
-    // Function to apply API blocking
     function applyApiBlocking() {
-        if (!apiBlockingEnabled) {
+        if (!isEnabled || !apiBlockingEnabled) {
             restoreApis();
             return;
         }
+        if (blockingApplied) {
+            return;
+        }
 
-        // ... existing API blocking code ...
+        if (navigator.mediaDevices && originalGetUserMedia) {
+            navigator.mediaDevices.getUserMedia = function() {
+                notifyBlocked('Camera/Microphone');
+                return Promise.reject(new Error('Media access blocked by InheritiGuard'));
+            };
+        }
+        if (navigator.mediaDevices && originalEnumerateDevices) {
+            navigator.mediaDevices.enumerateDevices = function() {
+                notifyBlocked('Device enumeration');
+                return Promise.reject(new Error('Device enumeration blocked by InheritiGuard'));
+            };
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition = function(success, error) {
+                notifyBlocked('Geolocation');
+                if (error) {
+                    error({ code: 1, message: 'Geolocation blocked by InheritiGuard' });
+                }
+            };
+            navigator.geolocation.watchPosition = function() {
+                notifyBlocked('Geolocation tracking');
+                return 0;
+            };
+            navigator.geolocation.clearWatch = function() {};
+        }
+
+        if (navigator.getBattery) {
+            navigator.getBattery = function() {
+                notifyBlocked('Battery status');
+                return Promise.reject(new Error('Battery status blocked by InheritiGuard'));
+            };
+        }
+
+        if (window.Notification) {
+            window.Notification.requestPermission = function() {
+                notifyBlocked('Notification permission');
+                return Promise.reject(new Error('Notifications blocked by InheritiGuard'));
+            };
+        }
+
+        if (navigator.serviceWorker && navigator.serviceWorker.register) {
+            navigator.serviceWorker.register = function() {
+                notifyBlocked('Service Worker registration');
+                return Promise.reject(new Error('Service Worker registration blocked by InheritiGuard'));
+            };
+        }
+
+        blockingApplied = true;
     }
 
-    // Listen for toggle updates
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === 'updateApiBlocking') {
-            apiBlockingEnabled = message.enabled;
-            if (isEnabled) {
-                applyApiBlocking();
-            }
-        } else if (message.action === 'toggleEnabled') {
-            isEnabled = message.enabled;
-            if (isEnabled) {
-                applyApiBlocking();
-            } else {
-                restoreApis();
-            }
+    function applyProtectionState(state) {
+        if (!state) {
+            return;
+        }
+        isEnabled = !!state.isEnabled;
+        if (typeof state.apiBlockingEnabled !== 'undefined') {
+            apiBlockingEnabled = !!state.apiBlockingEnabled;
+        }
+        applyApiBlocking();
+    }
+
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.action === 'protectionState' || message.action === 'toggleEnabled') {
+            applyProtectionState({
+                isEnabled: message.isEnabled ?? message.enabled,
+                apiBlockingEnabled: message.apiBlockingEnabled
+            });
+        } else if (message.action === 'updateApiBlocking') {
+            apiBlockingEnabled = !!message.enabled;
+            applyApiBlocking();
         }
     });
 
-    // Get initial state
     chrome.runtime.sendMessage({ action: 'getStatus' }, (response) => {
-        if (response) {
-            isEnabled = response.isEnabled;
-            apiBlockingEnabled = response.apiBlockingEnabled;
-            if (isEnabled) {
-                applyApiBlocking();
-            }
+        if (chrome.runtime.lastError) {
+            return;
         }
+        applyProtectionState(response);
     });
 
-    // Add error handling for initialization
-    try {
-        console.log('[InheritiGuard] API Protection initialized successfully');
-    } catch (error) {
-        console.error('[InheritiGuard] Initialization error:', error);
-    }
-
-    // Add CSP violation monitoring
     document.addEventListener('securitypolicyviolation', (e) => {
         if (isEnabled) {
             chrome.runtime.sendMessage({
                 action: 'cspViolation',
                 url: window.location.href,
                 violation: `${e.violatedDirective} from ${e.blockedURI}`
+            }, () => {
+                void chrome.runtime.lastError;
             });
         }
     });
-
-    // Listen for CSP monitoring requests
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === 'monitorCsp') {
-            console.log('[InheritiGuard] Monitoring CSP violations for:', message.url);
-        }
-        // ... existing message handling ...
-    });
-})(); 
+})();
