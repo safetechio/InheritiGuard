@@ -5,7 +5,7 @@
   <style>
     body {
       width: 400px;
-      padding: 15px;
+      padding: 15px 15px 48px;
       font-family: Arial, sans-serif;
     }
     .header {
@@ -152,6 +152,35 @@
       font-size: 14px;
       color: #666;
     }
+    .idle-minutes {
+      width: 56px;
+      padding: 4px 6px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .idle-minutes:disabled {
+      opacity: 0.5;
+    }
+    .secure-leave {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      background-color: #c62828;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .secure-leave:hover {
+      background-color: #b71c1c;
+    }
+    .secure-leave:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -176,6 +205,34 @@
       </label>
       <span class="toggle-label">Block Sensitive APIs</span>
     </div>
+
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="clipboardGuardToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Clipboard leak guard</span>
+    </div>
+
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="idleLockToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Idle lock</span>
+      <input type="number" id="idleLockMinutes" class="idle-minutes" min="1" max="120" value="10">
+      <span class="toggle-label">min</span>
+    </div>
+
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="downloadTrapToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Download / file trap</span>
+    </div>
+
+    <button type="button" id="secureLeaveButton" class="secure-leave">Secure leave</button>
   </div>
 
   <div class="blocked-sites">

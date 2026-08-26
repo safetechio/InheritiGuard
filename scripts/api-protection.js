@@ -7,7 +7,6 @@
     // Store original APIs for reference
     const originalMediaDevices = navigator.mediaDevices;
     const originalGeolocation = navigator.geolocation;
-    const originalClipboard = navigator.clipboard;
     const originalBattery = navigator.getBattery;
     const originalNotification = window.Notification;
     const originalServiceWorker = navigator.serviceWorker;
@@ -64,28 +63,6 @@
         clearWatch: () => {}
     };
 
-    // Block Clipboard API
-    if (navigator.clipboard) {
-        navigator.clipboard = {
-            read: () => {
-                notifyBlocked('Clipboard read');
-                return Promise.reject(new Error('Clipboard read blocked by InheritiGuard'));
-            },
-            write: () => {
-                notifyBlocked('Clipboard write');
-                return Promise.reject(new Error('Clipboard write blocked by InheritiGuard'));
-            },
-            readText: () => {
-                notifyBlocked('Clipboard read');
-                return Promise.reject(new Error('Clipboard read blocked by InheritiGuard'));
-            },
-            writeText: () => {
-                notifyBlocked('Clipboard write');
-                return Promise.reject(new Error('Clipboard write blocked by InheritiGuard'));
-            }
-        };
-    }
-
     // Block Battery API
     if (navigator.getBattery) {
         navigator.getBattery = () => {
@@ -138,7 +115,6 @@
     function restoreApis() {
         if (originalMediaDevices) navigator.mediaDevices = originalMediaDevices;
         if (originalGeolocation) navigator.geolocation = originalGeolocation;
-        if (originalClipboard) navigator.clipboard = originalClipboard;
         if (originalBattery) navigator.getBattery = originalBattery;
         if (originalNotification) window.Notification = originalNotification;
         if (originalServiceWorker) navigator.serviceWorker = originalServiceWorker;

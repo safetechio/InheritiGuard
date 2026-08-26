@@ -1,34 +1,57 @@
 document.addEventListener('DOMContentLoaded', () => {
   const toggle = document.getElementById('enableToggle');
   const apiToggle = document.getElementById('apiBlockToggle');
+  const clipboardToggle = document.getElementById('clipboardGuardToggle');
+  const idleToggle = document.getElementById('idleLockToggle');
+  const idleMinutesInput = document.getElementById('idleLockMinutes');
+  const downloadToggle = document.getElementById('downloadTrapToggle');
+  const secureLeaveButton = document.getElementById('secureLeaveButton');
   const enabledText = document.getElementById('enabledText');
   const statusRow = document.getElementById('statusRow');
   const statusIcon = document.getElementById('statusIcon');
   const statusText = document.getElementById('statusText');
 
-  console.log('[InheritiGuard Popup] Initializing...');
+  function sendAction(payload) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(payload, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
 
-  // Function to update UI based on status
   function updateUI(status) {
-    // Check if status exists and has required properties
     if (!status) {
       console.error('[InheritiGuard Popup] Invalid status received');
       return;
     }
 
     try {
-      // Direct mapping of enabled state to toggle
       toggle.checked = !!status.isEnabled;
-      
-      // Only update API toggle if the property exists
+      enabledText.textContent = status.isEnabled ? 'Enabled' : 'Disabled';
+
       if (typeof status.apiBlockingEnabled !== 'undefined') {
         apiToggle.checked = status.apiBlockingEnabled;
         apiToggle.disabled = !status.isEnabled;
         apiToggle.parentElement.style.opacity = status.isEnabled ? '1' : '0.5';
       }
-      
-      // Update enabled text
-      enabledText.textContent = status.isEnabled ? 'Enabled' : 'Disabled';
+
+      if (typeof status.clipboardGuardEnabled !== 'undefined') {
+        clipboardToggle.checked = status.clipboardGuardEnabled;
+      }
+      if (typeof status.idleLockEnabled !== 'undefined') {
+        idleToggle.checked = status.idleLockEnabled;
+        idleMinutesInput.disabled = !status.idleLockEnabled;
+      }
+      if (typeof status.idleLockMinutes !== 'undefined') {
+        idleMinutesInput.value = status.idleLockMinutes;
+      }
+      if (typeof status.downloadTrapEnabled !== 'undefined') {
+        downloadToggle.checked = status.downloadTrapEnabled;
+      }
 
       statusIcon.src = 'icons/icon32.png';
       statusRow.classList.toggle('enabled', !!status.isEnabled);
@@ -41,57 +64,93 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Get initial status with error handling
-  chrome.runtime.sendMessage({ action: 'getStatus' }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('[InheritiGuard Popup] Error getting status:', chrome.runtime.lastError);
+  sendAction({ action: 'getStatus' }).then(updateUI).catch((error) => {
+    console.error('[InheritiGuard Popup] Error getting status:', error);
+  });
+
+  toggle.addEventListener('change', () => {
+    sendAction({ action: 'toggleEnabled', enabled: toggle.checked })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error toggling enabled state:', error);
+        toggle.checked = !toggle.checked;
+      });
+  });
+
+  apiToggle.addEventListener('change', () => {
+    sendAction({ action: 'toggleApiBlocking', enabled: apiToggle.checked })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error toggling API blocking:', error);
+        apiToggle.checked = !apiToggle.checked;
+      });
+  });
+
+  clipboardToggle.addEventListener('change', () => {
+    sendAction({ action: 'toggleClipboardGuard', enabled: clipboardToggle.checked })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error toggling clipboard guard:', error);
+        clipboardToggle.checked = !clipboardToggle.checked;
+      });
+  });
+
+  idleToggle.addEventListener('change', () => {
+    sendAction({ action: 'toggleIdleLock', enabled: idleToggle.checked })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error toggling idle lock:', error);
+        idleToggle.checked = !idleToggle.checked;
+      });
+  });
+
+  idleMinutesInput.addEventListener('change', () => {
+    const minutes = Math.max(1, Math.min(120, Number(idleMinutesInput.value) || 10));
+    idleMinutesInput.value = minutes;
+    sendAction({ action: 'setIdleLockMinutes', minutes })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error saving idle minutes:', error);
+      });
+  });
+
+  downloadToggle.addEventListener('change', () => {
+    sendAction({ action: 'toggleDownloadTrap', enabled: downloadToggle.checked })
+      .then(updateUI)
+      .catch((error) => {
+        console.error('[InheritiGuard Popup] Error toggling download trap:', error);
+        downloadToggle.checked = !downloadToggle.checked;
+      });
+  });
+
+  secureLeaveButton.addEventListener('click', async () => {
+    const confirmed = window.confirm(
+      'Close all Inheriti tabs and clear Inheriti session cookies and site data?'
+    );
+    if (!confirmed) {
       return;
     }
-    updateUI(response);
+
+    secureLeaveButton.disabled = true;
+    try {
+      const result = await sendAction({ action: 'secureLeave' });
+      updateUI(result);
+    } catch (error) {
+      console.error('[InheritiGuard Popup] Secure leave failed:', error);
+    } finally {
+      secureLeaveButton.disabled = false;
+    }
   });
 
-  // Add toggle event listener with error handling
-  toggle.addEventListener('change', () => {
-    chrome.runtime.sendMessage({ 
-      action: 'toggleEnabled', 
-      enabled: toggle.checked 
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('[InheritiGuard Popup] Error toggling enabled state:', chrome.runtime.lastError);
-        // Revert toggle if there was an error
-        toggle.checked = !toggle.checked;
-        return;
-      }
-      updateUI(response);
-    });
-  });
-
-  // Add API toggle event listener with error handling
-  apiToggle.addEventListener('change', () => {
-    chrome.runtime.sendMessage({ 
-      action: 'toggleApiBlocking', 
-      enabled: apiToggle.checked 
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('[InheritiGuard Popup] Error toggling API blocking:', chrome.runtime.lastError);
-        // Revert toggle if there was an error
-        apiToggle.checked = !apiToggle.checked;
-        return;
-      }
-      updateUI(response);
-    });
-  });
-
-  // Add version link handling with error handling
   try {
     const manifest = chrome.runtime.getManifest();
     const versionLink = document.getElementById('versionLink');
     if (versionLink) {
       versionLink.textContent = `v${manifest.version}`;
       versionLink.href = manifest.homepage_url || '#';
-      versionLink.target = "_blank";
+      versionLink.target = '_blank';
     }
   } catch (error) {
     console.error('[InheritiGuard Popup] Error setting version:', error);
   }
-}); 
+});

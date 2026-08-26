@@ -9,6 +9,36 @@ let handleTabUpdate = null;
 
 // Add new state variable
 let apiBlockingEnabled = true;
+let clipboardGuardEnabled = true;
+let idleLockEnabled = true;
+let idleLockMinutes = 10;
+let downloadTrapEnabled = true;
+let sensitiveClipboardUntil = 0;
+const blockedDownloadIds = new Set();
+const SENSITIVE_CLIPBOARD_MS = 5 * 60 * 1000;
+const SESSION_ROOT_DOMAINS = ['inheriti.com', 'safetech.io', 'safekey.be'];
+const SESSION_ORIGINS = [
+    'https://inheriti.com',
+    'https://www.inheriti.com',
+    'https://app.inheriti.com',
+    'https://app-stg.inheriti.com',
+    'https://app-dev.inheriti.com',
+    'https://business.inheriti.com',
+    'https://business-prod.inheriti.com',
+    'https://business-stg.inheriti.com',
+    'https://business-dev.inheriti.com',
+    'https://inheritichain-explorer.inheriti.com',
+    'https://inheritichain-explorer-dev.inheriti.com',
+    'https://safetech.io',
+    'https://safeid-prod.safetech.io',
+    'https://safeid-stg.safetech.io',
+    'https://safeid-dev.safetech.io',
+    'https://safekey.be'
+];
+const RISKY_DOWNLOAD_EXTENSIONS = [
+    'html', 'htm', 'xhtml', 'svg', 'js', 'jse', 'exe', 'msi', 'dll',
+    'bat', 'cmd', 'com', 'scr', 'pif', 'wsf', 'vbs', 'hta', 'ps1', 'apk'
+];
 
 // Function to add blocked site to list with proper URL
 function addBlockedSite(url) {
@@ -111,6 +141,187 @@ function isTrustedDomain(url) {
     }
 }
 
+function hostnameFromUrl(url) {
+    try {
+        return new URL(url).hostname.toLowerCase();
+    } catch (e) {
+        return '';
+    }
+}
+
+function isSessionHostname(hostname) {
+    const host = (hostname || '').toLowerCase();
+    return SESSION_ROOT_DOMAINS.some((root) => host === root || host.endsWith('.' + root));
+}
+
+function isSessionUrl(url) {
+    return !!url && isSessionHostname(hostnameFromUrl(url));
+}
+
+function getPublicStatus() {
+    return {
+        isEnabled,
+        currentStatus,
+        blockedSites,
+        apiBlockingEnabled,
+        clipboardGuardEnabled,
+        idleLockEnabled,
+        idleLockMinutes,
+        downloadTrapEnabled
+    };
+}
+
+function isSensitiveClipboardActive() {
+    return Date.now() < sensitiveClipboardUntil;
+}
+
+async function hasOpenSessionTabs() {
+    const tabs = await chrome.tabs.query({});
+    return tabs.some((tab) => isSessionUrl(tab.url));
+}
+
+async function getClipboardDecisionAsync(senderUrl) {
+    const onSessionPage = isSessionUrl(senderUrl);
+    if (onSessionPage || !clipboardGuardEnabled) {
+        return {
+            clipboardGuardEnabled,
+            allowPaste: true,
+            allowRead: true
+        };
+    }
+
+    const sessionOpen = await hasOpenSessionTabs();
+    const sensitive = isSensitiveClipboardActive();
+    return {
+        clipboardGuardEnabled,
+        allowPaste: !sensitive,
+        allowRead: !sessionOpen && !sensitive
+    };
+}
+
+async function broadcastClipboardState() {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(tabs.map(async (tab) => {
+        if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+            return;
+        }
+        const decision = await getClipboardDecisionAsync(tab.url);
+        try {
+            await chrome.tabs.sendMessage(tab.id, {
+                action: 'clipboardState',
+                ...decision
+            });
+        } catch (error) {
+            // Tab may not have a content script.
+        }
+    }));
+}
+
+function markSensitiveClipboard() {
+    sensitiveClipboardUntil = Date.now() + SENSITIVE_CLIPBOARD_MS;
+    broadcastClipboardState();
+}
+
+function cookieUrl(cookie) {
+    const host = cookie.domain.replace(/^\./, '');
+    return `http${cookie.secure ? 's' : ''}://${host}${cookie.path || '/'}`;
+}
+
+async function clearSessionCookies() {
+    for (const domain of SESSION_ROOT_DOMAINS) {
+        const cookies = await chrome.cookies.getAll({ domain });
+        await Promise.all(cookies.map((cookie) =>
+            chrome.cookies.remove({
+                url: cookieUrl(cookie),
+                name: cookie.name,
+                storeId: cookie.storeId
+            }).catch(() => {})
+        ));
+    }
+}
+
+async function secureLeave(reason) {
+    const tabs = await chrome.tabs.query({});
+    const sessionTabs = tabs.filter((tab) => tab.id && isSessionUrl(tab.url));
+    await Promise.all(sessionTabs.map((tab) => chrome.tabs.remove(tab.id).catch(() => {})));
+
+    await clearSessionCookies();
+    try {
+        await chrome.browsingData.remove(
+            { origins: SESSION_ORIGINS },
+            { cookies: true, localStorage: true }
+        );
+    } catch (error) {
+        console.error('[InheritiGuard] browsingData clear failed:', error);
+    }
+
+    sensitiveClipboardUntil = 0;
+    apiBlockingEnabled = false;
+    await chrome.storage.local.set({ apiBlockingEnabled: false });
+    await broadcastClipboardState();
+
+    await showSecurityNotification(reason === 'idle' ? 'idleLock' : 'secureLeave', {
+        count: sessionTabs.length
+    });
+
+    return { closedTabs: sessionTabs.length, ...getPublicStatus() };
+}
+
+function applyIdleDetection() {
+    const seconds = Math.max(15, Math.min(60 * 120, Number(idleLockMinutes) * 60 || 600));
+    try {
+        chrome.idle.setDetectionInterval(seconds);
+        console.log('[InheritiGuard] Idle detection set to', seconds, 'seconds');
+    } catch (error) {
+        console.error('[InheritiGuard] Failed to set idle interval:', error);
+    }
+}
+
+function extensionFromPath(path) {
+    const clean = (path || '').split('?')[0].split('#')[0];
+    const parts = clean.split('.');
+    if (parts.length < 2) {
+        return '';
+    }
+    return parts.pop().toLowerCase();
+}
+
+function isRiskyDownload(item) {
+    if (!downloadTrapEnabled) {
+        return false;
+    }
+
+    const url = item.finalUrl || item.url || '';
+    const referrer = item.referrer || '';
+    const filename = item.filename || '';
+    const fromSession = isSessionUrl(url) || isSessionUrl(referrer);
+    if (!fromSession && !url.startsWith('blob:') && !url.startsWith('data:')) {
+        return false;
+    }
+
+    if (url.startsWith('blob:') || url.startsWith('data:text/html') || url.startsWith('data:image/svg') || url.startsWith('data:application/xhtml')) {
+        return fromSession || url.includes('inheriti.com');
+    }
+
+    const ext = extensionFromPath(filename) || extensionFromPath(url);
+    return fromSession && RISKY_DOWNLOAD_EXTENSIONS.includes(ext);
+}
+
+async function blockDownload(item) {
+    if (blockedDownloadIds.has(item.id)) {
+        return;
+    }
+    blockedDownloadIds.add(item.id);
+    try {
+        await chrome.downloads.cancel(item.id);
+        await chrome.downloads.erase({ id: item.id });
+    } catch (error) {
+        console.error('[InheritiGuard] Failed to cancel download:', error);
+    }
+    const label = item.filename || hostnameFromUrl(item.url) || 'file';
+    await showSecurityNotification('download', { filename: label });
+}
+
 // Function to remove all rules
 async function removeAllRules() {
     try {
@@ -160,6 +371,24 @@ async function showSecurityNotification(type, details) {
                 break;
             case 'csp':
                 notificationOptions.message = `CSP Violation blocked\nSite: ${details.url}\nViolation: ${details.violation}`;
+                break;
+            case 'clipboard':
+                notificationOptions.message = `Blocked ${details.type} on an untrusted site`;
+                break;
+            case 'download':
+                notificationOptions.message = `Blocked a risky download: ${details.filename}`;
+                break;
+            case 'idleLock':
+                notificationOptions.title = 'InheritiGuard - Idle lock';
+                notificationOptions.message = 'You were idle, so Inheriti tabs were closed and session data was cleared.';
+                notificationOptions.requireInteraction = false;
+                notificationOptions.buttons = [{ title: 'Open Inheriti' }];
+                break;
+            case 'secureLeave':
+                notificationOptions.title = 'InheritiGuard - Secure leave';
+                notificationOptions.message = 'Inheriti tabs were closed and session data was cleared.';
+                notificationOptions.requireInteraction = false;
+                notificationOptions.buttons = [{ title: 'Open Inheriti' }];
                 break;
         }
 
@@ -348,14 +577,27 @@ console.log('[InheritiGuard] Extension initializing...');
         await removeAllRules();
         
         // Load saved state and blocked sites
-        const result = await chrome.storage.local.get(['isEnabled', 'blockedSites', 'apiBlockingEnabled']);
+        const result = await chrome.storage.local.get([
+            'isEnabled',
+            'blockedSites',
+            'apiBlockingEnabled',
+            'clipboardGuardEnabled',
+            'idleLockEnabled',
+            'idleLockMinutes',
+            'downloadTrapEnabled'
+        ]);
         isEnabled = result.isEnabled || false;
-        apiBlockingEnabled = result.apiBlockingEnabled ?? true; // Default to true
+        apiBlockingEnabled = result.apiBlockingEnabled ?? true;
+        clipboardGuardEnabled = result.clipboardGuardEnabled ?? true;
+        idleLockEnabled = result.idleLockEnabled ?? true;
+        idleLockMinutes = Number(result.idleLockMinutes) > 0 ? Number(result.idleLockMinutes) : 10;
+        downloadTrapEnabled = result.downloadTrapEnabled ?? true;
         blockedSites = result.blockedSites || [];
         
         console.log(`[InheritiGuard] Loaded saved state: ${isEnabled ? 'enabled' : 'disabled'}`);
         console.log(`[InheritiGuard] API Blocking: ${apiBlockingEnabled ? 'enabled' : 'disabled'}`);
         
+        applyIdleDetection();
         updateStatus(isEnabled ? 'secure' : 'warning');
         if (isEnabled) {
             await updateRules(true);
@@ -377,9 +619,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[InheritiGuard] Received message:', message);
     
     if (message.action === 'getStatus') {
-        console.log('[InheritiGuard] Status requested:', { isEnabled, currentStatus, blockedSites, apiBlockingEnabled });
-        sendResponse({ isEnabled, currentStatus, blockedSites, apiBlockingEnabled });
-        return false; // Synchronous response
+        sendResponse(getPublicStatus());
+        return false;
     } else if (message.action === 'toggleEnabled') {
         isEnabled = message.enabled;
         console.log(`[InheritiGuard] Protection toggled: ${isEnabled ? 'ON' : 'OFF'}`);
@@ -389,18 +630,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         
         updateRules(isEnabled).then(() => {
-            sendResponse({ isEnabled, currentStatus, blockedSites, apiBlockingEnabled });
+            sendResponse(getPublicStatus());
         });
-        return true; // Async response
+        return true;
     } else if (message.action === 'toggleApiBlocking') {
         apiBlockingEnabled = message.enabled;
-        console.log(`[InheritiGuard] API Blocking toggled: ${apiBlockingEnabled ? 'ON' : 'OFF'}`);
-        
         chrome.storage.local.set({ apiBlockingEnabled }, () => {
-            console.log(`[InheritiGuard] API Blocking state saved: ${apiBlockingEnabled}`);
-            sendResponse({ isEnabled, currentStatus, blockedSites, apiBlockingEnabled });
+            sendResponse(getPublicStatus());
         });
-        return true; // Async response
+        return true;
+    } else if (message.action === 'toggleClipboardGuard') {
+        clipboardGuardEnabled = message.enabled;
+        chrome.storage.local.set({ clipboardGuardEnabled }, async () => {
+            await broadcastClipboardState();
+            sendResponse(getPublicStatus());
+        });
+        return true;
+    } else if (message.action === 'toggleIdleLock') {
+        idleLockEnabled = message.enabled;
+        chrome.storage.local.set({ idleLockEnabled }, () => {
+            applyIdleDetection();
+            sendResponse(getPublicStatus());
+        });
+        return true;
+    } else if (message.action === 'setIdleLockMinutes') {
+        idleLockMinutes = Math.max(1, Math.min(120, Number(message.minutes) || 10));
+        chrome.storage.local.set({ idleLockMinutes }, () => {
+            applyIdleDetection();
+            sendResponse(getPublicStatus());
+        });
+        return true;
+    } else if (message.action === 'toggleDownloadTrap') {
+        downloadTrapEnabled = message.enabled;
+        chrome.storage.local.set({ downloadTrapEnabled }, () => {
+            sendResponse(getPublicStatus());
+        });
+        return true;
+    } else if (message.action === 'secureLeave') {
+        secureLeave('manual').then((result) => sendResponse(result));
+        return true;
+    } else if (message.action === 'clipboardCopiedOnSession') {
+        markSensitiveClipboard();
+        sendResponse({ ok: true });
+        return false;
+    } else if (message.action === 'clipboardQuery') {
+        getClipboardDecisionAsync(sender?.url || sender?.tab?.url || '').then((decision) => {
+            sendResponse(decision);
+        });
+        return true;
+    } else if (message.action === 'clipboardBlocked') {
+        showSecurityNotification('clipboard', {
+            type: message.type,
+            url: message.url
+        });
     } else if (message.action === 'apiBlocked') {
         showSecurityNotification('api', {
             type: message.type,
@@ -419,4 +701,60 @@ chrome.runtime.onInstalled.addListener(() => {
     console.log('[InheritiGuard] Extension installed/updated');
 });
 
-// Remove the webRequest listener section completely 
+chrome.idle.onStateChanged.addListener(async (state) => {
+    if (!idleLockEnabled) {
+        return;
+    }
+    if (state !== 'idle' && state !== 'locked') {
+        return;
+    }
+    const sessionOpen = await hasOpenSessionTabs();
+    if (!sessionOpen) {
+        return;
+    }
+    console.log('[InheritiGuard] Idle lock triggered:', state);
+    await secureLeave('idle');
+});
+
+chrome.downloads.onCreated.addListener((item) => {
+    if (isRiskyDownload(item)) {
+        blockDownload(item);
+    }
+});
+
+chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+    if (isRiskyDownload(item)) {
+        blockDownload(item);
+    }
+    suggest();
+});
+
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+    if (!downloadTrapEnabled || details.frameId !== 0) {
+        return;
+    }
+
+    const dest = details.url || '';
+    const isDataDoc = /^data:(text\/html|application\/xhtml|image\/svg)/i.test(dest);
+    const isBlob = dest.startsWith('blob:');
+    if (!isDataDoc && !isBlob) {
+        return;
+    }
+
+    try {
+        const tab = await chrome.tabs.get(details.tabId);
+        const fromSession = isSessionUrl(tab.url) || dest.includes('inheriti.com');
+        if (!fromSession) {
+            return;
+        }
+
+        const blockPageURL = chrome.runtime.getURL('blocked.html');
+        await chrome.tabs.update(details.tabId, {
+            url: `${blockPageURL}?blockedUrl=${encodeURIComponent(dest.slice(0, 80))}`
+        });
+        await showSecurityNotification('download', { filename: 'inline HTML document' });
+    } catch (error) {
+        console.error('[InheritiGuard] Failed to trap inline document:', error);
+    }
+});
+ 

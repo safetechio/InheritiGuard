@@ -8,7 +8,12 @@
     "declarativeNetRequest",
     "storage",
     "notifications",
-    "tabs"
+    "tabs",
+    "idle",
+    "cookies",
+    "downloads",
+    "browsingData",
+    "webNavigation"
   ],
   "host_permissions": [
     "*://*.inheriti.com/*",
@@ -84,7 +89,7 @@
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["scripts/api-protection.js"],
+    "js": ["scripts/api-protection.js", "scripts/clipboard-guard.js"],
     "run_at": "document_start",
     "all_frames": true
   }]
